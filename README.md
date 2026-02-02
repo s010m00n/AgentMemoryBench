@@ -1,4 +1,4 @@
-# MemoryBench: LLM 智能体终身学习基准测试
+# AgentMemoryBench: LLM 智能体终身学习基准测试
 
 用于评估 LLM 智能体在终身学习场景中记忆机制的研究基准。
 
