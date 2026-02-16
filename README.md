@@ -37,7 +37,7 @@
 
 ---
 
-## 🎯 Overview
+<h2 id="overview">🎯 Overview</h2>
 
 AgentMemoryBench provides a unified framework to evaluate how LLM agents learn and retain two types of memory:
 - **System Memory**: Task workflows and execution patterns
@@ -49,7 +49,7 @@ The benchmark spans **6 interactive tasks** across 4 grounding types:
 - **Web-grounded**: WebShop (e-commerce)
 - **Dialogue-grounded**: LoCoMo (long-term conversations)
 
-## 📊 Evaluation Modes
+<h2 id="evaluation-modes">📊 Evaluation Modes</h2>
 
 AgentMemoryBench supports **5 complementary evaluation modes** to provide multi-dimensional assessment of memory systems:
 
@@ -150,7 +150,7 @@ AgentMemoryBench/
 └── README.md                   # This file
 ```
 
-## 🚀 Quick Start
+<h2 id="quick-start">🚀 Quick Start</h2>
 
 ### 1. Prerequisites
 
@@ -396,7 +396,7 @@ python -m src.runner.main
 python -m src.runner.main --config configs/assignment/my_experiment.yaml
 ```
 
-## 🛠️ Creating Custom Memory Mechanisms
+<h2 id="creating-custom-memory-mechanisms">🛠️ Creating Custom Memory Mechanisms</h2>
 
 ### Step 1: Implement Memory Class
 
@@ -497,7 +497,7 @@ memory_mechanism:
   config_path: memory/my_memory/my_memory.yaml  # Optional
 ```
 
-## 📈 Implemented Memory Mechanisms
+<h2 id="implemented-memory-mechanisms">📈 Implemented Memory Mechanisms</h2>
 
 | Method | Type | Description | Key Features |
 |--------|------|-------------|--------------|
