@@ -36,6 +36,7 @@ class EverOSPersonalConfig:
     flush_after_add: bool = True
     success_only: bool = True
     reward_bigger_than_zero: bool = False
+    session_injection_only: bool = False
     prompt_template: str = "Based on your previous interactions, here are relevant personal memories:\n{memories}"
     where: str = "tail"
     request_timeout: float = 60.0
@@ -59,6 +60,10 @@ class EverOSPersonalMemory(MemoryMechanism):
                 "Content-Type": "application/json",
             }
         )
+
+    @staticmethod
+    def _print(message: str) -> None:
+        print(f"[EverOSPersonal] {message}")
 
     def _build_url(self, path: str) -> str:
         return f"{self.config.base_url.rstrip('/')}{path}"
@@ -146,6 +151,7 @@ class EverOSPersonalMemory(MemoryMechanism):
         enhanced = list(messages) if messages is not None else []
         query = self._extract_query(messages)
         if not query:
+            self._print(f"use_memory task={task}: no query extracted, skipping retrieval")
             return enhanced
 
         body: Dict[str, Any] = {
@@ -160,6 +166,10 @@ class EverOSPersonalMemory(MemoryMechanism):
             body["radius"] = self.config.radius
 
         try:
+            self._print(
+                f"use_memory task={task}: query_len={len(query)}, top_k={self.config.top_k}, "
+                f"memory_types={self.config.memory_types}"
+            )
             response = self._request_with_retry(
                 method="POST",
                 path="/api/v1/memories/search",
@@ -171,12 +181,15 @@ class EverOSPersonalMemory(MemoryMechanism):
             data = payload.get("data", {}) if isinstance(payload, dict) else {}
             memory_text = self._format_search_results(data)
             if not memory_text:
+                self._print(f"use_memory task={task}: retrieval returned no formatted memories")
                 return enhanced
             memory_content = self.config.prompt_template.format(memories=memory_text)
             enhanced = enhance_messages_with_memory(enhanced, memory_content, where=self.config.where)
             assert_memory_injection_position(enhanced, self.config.where)
+            self._print(f"use_memory task={task}: injected memory_chars={len(memory_content)}")
             return enhanced
         except Exception as exc:
+            self._print(f"use_memory task={task}: search failed: {exc}")
             LOGGER.warning("[EverOSPersonal] Search failed for task=%s: %s", task, exc)
             return enhanced
 
@@ -261,18 +274,25 @@ class EverOSPersonalMemory(MemoryMechanism):
         )
 
     def update_memory(self, task: str, history: List[Dict[str, Any]], result: Dict[str, Any]) -> None:
+        if self.config.session_injection_only and result.get("type") != "session_injection":
+            self._print(f"update_memory task={task}: skipped by session_injection_only")
+            return
+
         finish = result.get("finish", False)
         status = result.get("status", "")
         reward = result.get("reward", 0)
         is_success = finish or status == "completed"
 
         if self.config.success_only and not is_success:
+            self._print(f"update_memory task={task}: skipped by success_only (status={status}, reward={reward})")
             return
         if self.config.reward_bigger_than_zero and reward <= 0:
+            self._print(f"update_memory task={task}: skipped by reward_bigger_than_zero (reward={reward})")
             return
 
         messages = self._serialize_history(history)
         if not messages:
+            self._print(f"update_memory task={task}: serialized history empty, skipping add")
             return
 
         session_id = self._resolve_session_id(task)
@@ -285,6 +305,10 @@ class EverOSPersonalMemory(MemoryMechanism):
             body["session_id"] = session_id
 
         try:
+            self._print(
+                f"update_memory task={task}: uploading messages={len(messages)}, "
+                f"session_id={session_id}, async_mode={self.config.async_mode}"
+            )
             self._request_with_retry(
                 method="POST",
                 path="/api/v1/memories",
@@ -293,10 +317,14 @@ class EverOSPersonalMemory(MemoryMechanism):
                 purpose="add personal memories",
             )
             if self.config.flush_after_add:
+                self._print(f"update_memory task={task}: flushing session_id={session_id}")
                 self._flush(session_id)
             if self.config.wait_time > 0:
+                self._print(f"update_memory task={task}: waiting {self.config.wait_time}s after add")
                 time.sleep(self.config.wait_time)
+            self._print(f"update_memory task={task}: add complete")
         except Exception as exc:
+            self._print(f"update_memory task={task}: update failed: {exc}")
             LOGGER.warning("[EverOSPersonal] Update failed for task=%s: %s", task, exc)
 
 
@@ -320,6 +348,7 @@ def load_everos_personal_from_yaml(config_path: str) -> EverOSPersonalMemory:
         flush_after_add=bool(raw.get("flush_after_add", True)),
         success_only=bool(raw.get("success_only", True)),
         reward_bigger_than_zero=bool(raw.get("reward_bigger_than_zero", False)),
+        session_injection_only=bool(raw.get("session_injection_only", False)),
         prompt_template=str(raw.get("prompt_template", "Based on your previous interactions, here are relevant personal memories:\n{memories}")),
         where=str(raw.get("where", "tail")),
         request_timeout=float(raw.get("request_timeout", 60.0)),

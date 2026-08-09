@@ -93,6 +93,7 @@ class Mem0Config:
     rerank: bool = True
     success_only: bool = True
     reward_bigger_than_zero: bool = False  # True: only store samples with reward > 0, False: store all
+    session_injection_only: bool = False
     prompt_template: str = "Based on your previous interactions, here are relevant memories:\n{memories}"
     where: str = "tail"  # "tail": memory appended after user question | "front": memory prepended before user question
     # Retry configuration
@@ -209,6 +210,7 @@ class Mem0Memory(MemoryMechanism):
         # Extract query
         query = self._extract_query(messages)
         if not query:
+            print(f"[Mem0Memory] use_memory task={task}: no query extracted, skipping retrieval")
             return enhanced
 
         try:
@@ -226,10 +228,20 @@ class Mem0Memory(MemoryMechanism):
             if self.config.rerank:
                 search_kwargs["rerank"] = True
 
+            print(
+                f"[Mem0Memory] use_memory task={task}: query_len={len(query)}, top_k={self.config.top_k}, "
+                f"threshold={self.config.threshold}, rerank={self.config.rerank}"
+            )
             memories = self._client.search(**search_kwargs)
 
             # Format memory text
             memory_text = self._format_memories(memories)
+            if memory_text:
+                print(
+                    f"[Mem0Memory] use_memory task={task}: retrieved memory_chars={len(memory_text)}"
+                )
+            else:
+                print(f"[Mem0Memory] use_memory task={task}: retrieval returned no memories")
 
             # Inject into messages
             return self._inject_memories(enhanced, memory_text)
@@ -248,6 +260,10 @@ class Mem0Memory(MemoryMechanism):
         Called after a single sample finishes. Writes the new trajectory/result to Mem0.
         Retries on failure according to config until success or max retries reached.
         """
+        if self.config.session_injection_only and result.get("type") != "session_injection":
+            print(f"[Mem0] Skipping memory storage: session_injection_only=True and result.type is not session_injection (task={task})")
+            return
+
         finish = result.get("finish", False)
         status = result.get("status", "")
         reward = result.get("reward", 0)
@@ -408,6 +424,7 @@ class Mem0Memory(MemoryMechanism):
                             )
                             time.sleep(self.config.wait_time)
                             print(f"[Mem0] Wait completed, continuing...")
+                        print(f"[Mem0Memory] update_memory task={task}: add complete")
                         return
                     else:
                         # Unexpected return: results is empty
@@ -533,6 +550,7 @@ def load_mem0_from_yaml(config_path: str) -> Mem0Memory:
     retry_backoff = float(raw.get("retry_backoff", 2.0))  # Exponential backoff multiplier
     # reward_bigger_than_zero config
     reward_bigger_than_zero = bool(raw.get("reward_bigger_than_zero", False))
+    session_injection_only = bool(raw.get("session_injection_only", False))
     # Wait configuration
     wait_time = float(raw.get("wait_time", 0.0))  # Time to wait after each successful memory add (seconds)
 
@@ -545,6 +563,7 @@ def load_mem0_from_yaml(config_path: str) -> Mem0Memory:
         rerank=rerank,
         success_only=success_only,
         reward_bigger_than_zero=reward_bigger_than_zero,
+        session_injection_only=session_injection_only,
         prompt_template=prompt_template,
         where=where,
         max_retries=max_retries,

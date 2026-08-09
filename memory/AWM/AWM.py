@@ -43,6 +43,7 @@ class AWMConfig:
     where: str
     success_only: bool
     reward_bigger_than_zero: bool
+    session_injection_only: bool
     workflow_rag_embedding_model: str
     workflow_rag_top_k: int
     workflow_rag_order: str
@@ -85,6 +86,10 @@ class AWM(MemoryMechanism):
             self.rag = None
 
         self._bootstrap_rag()
+
+    @staticmethod
+    def _print(message: str) -> None:
+        print(f"[AWM] {message}")
 
     @staticmethod
     def _read_text(path: Path) -> str:
@@ -207,19 +212,25 @@ class AWM(MemoryMechanism):
 
     def use_memory(self, task: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not self.rag:
+            self._print(f"use_memory task={task}: RAG not initialized, skipping retrieval")
             return list(messages) if messages is not None else []
 
         query = self._extract_query_from_messages(messages)
         if not query:
+            self._print(f"use_memory task={task}: no query extracted, skipping retrieval")
             return list(messages) if messages is not None else []
 
         retrieved = self.rag.retrieve(query=query, top_k=self.rag.top_k)
         if not retrieved:
+            self._print(f"use_memory task={task}: no workflows retrieved for query_len={len(query)}")
             return list(messages) if messages is not None else []
 
         workflow_memory = self.config.prompt_template.format(workflows="\n\n".join(retrieved))
         enhanced = enhance_messages_with_memory(messages, workflow_memory, where=self.where)
         assert_memory_injection_position(enhanced, self.where)
+        self._print(
+            f"use_memory task={task}: retrieved={len(retrieved)} workflows, memory_chars={len(workflow_memory)}"
+        )
         return enhanced
 
     def _build_trajectory_text(self, task: str, history: List[Dict[str, Any]]) -> str:
@@ -302,26 +313,36 @@ class AWM(MemoryMechanism):
         return results
 
     def update_memory(self, task: str, history: List[Dict[str, Any]], result: Dict[str, Any]) -> None:
+        if self.config.session_injection_only and result.get("type") != "session_injection":
+            self._print(f"update_memory task={task}: skipped by session_injection_only")
+            return
+
         status = result.get("status", "")
         reward = result.get("reward", 0)
         is_success = status == "completed"
 
         if self.config.success_only and not is_success:
+            self._print(f"update_memory task={task}: skipped by success_only (status={status}, reward={reward})")
             return
         if self.config.reward_bigger_than_zero and reward <= 0:
+            self._print(f"update_memory task={task}: skipped by reward_bigger_than_zero (reward={reward})")
             return
 
         trajectory_text = self._build_trajectory_text(task, history)
         if not trajectory_text:
+            self._print(f"update_memory task={task}: empty trajectory text, skipping induction")
             return
 
+        self._print(f"update_memory task={task}: inducing workflows from trajectory_chars={len(trajectory_text)}")
         messages = self._build_induction_messages(trajectory_text)
         response = self._call_llm(messages)
         workflow_blocks = self._split_workflow_blocks(response)
         if not workflow_blocks:
+            self._print(f"update_memory task={task}: no workflow blocks extracted")
             LOGGER.debug("[AWM] No workflow blocks extracted for task=%s", task)
             return
 
+        self._print(f"update_memory task={task}: extracted {len(workflow_blocks)} workflow blocks")
         for block in workflow_blocks:
             block = str(block or "").strip()
             if not block:
@@ -329,6 +350,7 @@ class AWM(MemoryMechanism):
             if self.rag:
                 self.rag.insert(key=block, value=block)
             self._append_workflow_record(task, block)
+        self._print(f"update_memory task={task}: stored {len(workflow_blocks)} workflow blocks")
 
 
 def load_awm_from_yaml(config_path: str) -> AWM:
@@ -359,6 +381,7 @@ def load_awm_from_yaml(config_path: str) -> AWM:
         where=str(raw.get("where", "tail")),
         success_only=bool(raw.get("success_only", True)),
         reward_bigger_than_zero=bool(raw.get("reward_bigger_than_zero", False)),
+        session_injection_only=bool(raw.get("session_injection_only", False)),
         workflow_rag_embedding_model=str(rag_cfg.get("embedding_model", "BAAI/bge-base-en-v1.5")),
         workflow_rag_top_k=int(rag_cfg.get("top_k", 5)),
         workflow_rag_order=str(rag_cfg.get("order", "similar_at_top")),

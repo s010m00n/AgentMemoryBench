@@ -116,8 +116,8 @@ AgentMemoryBench/
 │   ├── streamICL/             # RAG-based retrieval (topk=4)
 │   ├── AWM/                   # System memory via workflows
 │   ├── mem0/                  # Personal memory via preferences
-│   ├── everos_agent/          # Hosted agent memory via EverOS
 │   ├── everos_personal/       # Hosted personal memory via EverOS
+│   ├── skill_nudge/           # Skill library with periodic LLM review
 │   └── MEMs/                  # Multi-memory coordination (proposed)
 │
 ├── execution/                  # Execution engines
@@ -231,19 +231,6 @@ To use the Mem0 method:
    ```
 
 #### EverOS API Key
-
-To use the EverOS agent-memory method:
-
-1. Register for an API key at [everos.evermind.ai](https://everos.evermind.ai)
-2. Configure in `memory/everos_agent/everos_agent.yaml`:
-   ```yaml
-   api_key: "your_everos_api_key_here"
-   user_id: "exp_001"
-   search_method: "hybrid"
-   memory_types:
-     - "agent_memory"
-   flush_after_add: true
-   ```
 
 To use the EverOS personal-memory method:
 
@@ -440,8 +427,8 @@ memory_mechanism:
 | **streamICL** | Retrieval | RAG-based ICL | Stores full trajectories, topk=4 |
 | **awm** | System | Workflow memory | Extracts reusable tool workflows |
 | **mem0** | Personal | Preference memory | Graph-based storage with ADD/UPDATE/DELETE |
-| **everos_agent** | Hosted | Agent memory | EverOS-backed add/flush/search over trajectories |
 | **everos_personal** | Hosted | Personal memory | EverOS-backed personal memory extraction and retrieval |
+| **skill_nudge** | System | Skill library | LLM-selected skills with periodic CRUD-style review |
 | **MEMs** | Hybrid | Multi-memory | Coordinates system & personal memory via trigger model |
 
 ### Fair Comparison Notes
@@ -449,8 +436,8 @@ memory_mechanism:
 - **streamICL**: Uses topk=4 following original paper
 - **awm**: Lightweight workflow memory based on workflow induction and retrieval
 - **mem0**: Uses best practices from official implementation
-- **everos_agent**: Uses EverOS `agent` add/flush/search APIs for experience memory
 - **everos_personal**: Uses EverOS `personal` add/flush/search APIs for factual or preference memory
+- **skill_nudge**: Uses an LLM to select relevant skills by summary and periodically review the skill library
 
 See ablation studies in paper for detailed topk analysis across different tasks.
 

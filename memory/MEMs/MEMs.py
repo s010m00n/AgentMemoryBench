@@ -96,10 +96,6 @@ class MEMs(MemoryMechanism):
                 )
                 return Mem0Memory(memory_config)
 
-            elif "everos_agent" in yaml_data:
-                from ..everos_agent import load_everos_agent_from_yaml
-                return load_everos_agent_from_yaml(str(config_path))
-
             elif "everos_personal" in yaml_data:
                 from ..everos_personal import load_everos_personal_from_yaml
                 return load_everos_personal_from_yaml(str(config_path))

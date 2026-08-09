@@ -7,7 +7,7 @@ The following will be added to this directory in future iterations:
 - stream_icl
 - mem0
 - awm
-- everos_agent
+- skill_nudge
 - everos_personal
 - mems
 """

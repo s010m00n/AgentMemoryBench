@@ -20,8 +20,8 @@ def build_memory_from_config(cfg: ExperimentConfig):
     - zero_shot: no-memory baseline
     - stream_icl: streaming In-Context Learning
     - mem0: Mem0 memory system
-    - everos_agent: EverOS hosted agent-memory system
     - everos_personal: EverOS hosted personal-memory system
+    - skill_nudge: LLM-selected skill memory with periodic skill-library review
     - mems: Multi-Memory System (MEMs)
     - awm: Agent Workflow Memory
 

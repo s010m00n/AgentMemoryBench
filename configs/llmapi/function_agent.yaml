@@ -2,7 +2,7 @@
 
 # zgc
 gpt-4o-mini:
-  import: "./evaluate_api.yaml"
+  import: "./function_api.yaml"
   parameters:
     name: "gpt-4o-mini"
     body:
@@ -12,10 +12,28 @@ gpt-4o-mini:
 
 # siliconCloud
 Qwen/Qwen2.5-7B-Instruct:
-  import: "./evaluate_api.yaml"
+  import: "./function_api.yaml"
   parameters:
     name: "Qwen/Qwen2.5-7B-Instruct"
     body:
       model: "Qwen/Qwen2.5-7B-Instruct"
+      max_tokens: 4096
+      temperature: 0
+
+Qwen/Qwen3-8B:
+  import: "./function_api.yaml"
+  parameters:
+    name: "Qwen/Qwen3-8B"
+    body:
+      model: "Qwen/Qwen3-8B"
+      max_tokens: 4096
+      temperature: 0
+
+Qwen/Qwen3.5-9B:
+  import: "./function_api.yaml"
+  parameters:
+    name: "Qwen/Qwen3.5-9B"
+    body:
+      model: "Qwen/Qwen3.5-9B"
       max_tokens: 4096
       temperature: 0

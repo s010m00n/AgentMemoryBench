@@ -6,25 +6,25 @@
 tasks:
   # system memory tasks
   # - name: dbbench-std
-  #   config_path: configs/tasks/dbbench.yaml
+    # config_path: configs/tasks/dbbench.yaml
   # - name: os-std
-  #   config_path: configs/tasks/os.yaml
-  - name: kg-std
-    config_path: configs/tasks/kg.yaml
+    # config_path: configs/tasks/os.yaml
+  # - name: kg-std
+    # config_path: configs/tasks/kg.yaml
   # - name: alfworld-std
-  #   config_path: configs/tasks/alfworld.yaml
+    # config_path: configs/tasks/alfworld.yaml
   # - name: webshop-std
   #   config_path: configs/tasks/webshop.yaml
 
   # user memory tasks
-  # - name: locomo-0
-  #   config_path: configs/tasks/locomo.yaml 
+  - name: locomo-0
+    config_path: configs/tasks/locomo.yaml 
   # - name: locomo-1
-  #   config_path: configs/tasks/locomo.yaml
+    # config_path: configs/tasks/locomo.yaml
   # - name: locomo-2
-  #   config_path: configs/tasks/locomo.yaml
+    # config_path: configs/tasks/locomo.yaml
   # - name: locomo-3
-  #   config_path: configs/tasks/locomo.yaml
+    # config_path: configs/tasks/locomo.yaml
   # - name: locomo-4
   #   config_path: configs/tasks/locomo.yaml
   # - name: locomo-5
@@ -41,7 +41,7 @@ tasks:
 # ===== Memory Mechanism Configuration =====
 # Select a memory mechanism from the memory folder (all use snake_case naming)
 memory_mechanism:
-  name: mem0  # options: zero_shot, stream_icl, mem0, everos_agent, everos_personal, awm, mems
+  name: everos_personal  # options: zero_shot, stream_icl, mem0, everos_personal, skill_nudge, awm, mems
 
 # ===== Execution Method Configuration =====
 # Select an execution method from the execution folder
@@ -50,16 +50,14 @@ execution_method:
   config_path: execution/single_agent/single_agent.yaml
 
 # ===== Experiment Parameters =====
-experiment:
-  # Training mode: online (online learning), offline (offline learning), replay (replay learning),
-  # transfer (transfer learning), or repair (repair learning)
-  training_mode: online  # online | offline | replay | transfer | repair
+experiment:  # Training mode: online (online learning), offline (offline learning), replay (replay learning), transfer (transfer learning), or repair (repair learning)
+  training_mode: transfer  # online | offline | replay | transfer | repair
 
   train_size: 0.6  # only effective when training_mode is offline
 
   # Learn on transfer_task (update + enhance, equivalent to online) and test on transfer_after_task (enhance only)
-  transfer_task: dbbench-std  # only effective when training_mode is transfer
-  transfer_after_task: os-std  # only effective when training_mode is transfer
+  transfer_task: locomo-0  # only effective when training_mode is transfer
+  transfer_after_task: locomo-0  # only effective when training_mode is transfer
   forward_transfer_num: 3  # only effective when training_mode is transfer and transfer_task == transfer_after_task; number of forward-transfer steps
 
   # After learning m samples (update + enhance, equivalent to online), randomly sample n learned samples for testing (enhance only)

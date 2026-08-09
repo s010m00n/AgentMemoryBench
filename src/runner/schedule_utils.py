@@ -296,8 +296,8 @@ def build_replay_schedule_for_locomo(
     each session is one replay batch.
 
     For locomo tasks, replay mode partitions by session:
-    - Replay 1: all QAs from session 1 (train), then all QAs from session 1 (test)
-    - Replay 2: all QAs from sessions 1+2 (train), then sample from sessions 1+2 (test)
+    - Replay 1: learn session 1, then test all learned QAs from session 1
+    - Replay 2: learn session 2, then test all learned QAs from sessions 1+2
     - ...
 
     Args:
@@ -341,15 +341,22 @@ def build_replay_schedule_for_locomo(
         schedule.extend([(task_name, qa_idx) for qa_idx in session_qa_indices])
         learned_samples.extend(session_qa_indices)
 
-        # 5. Sample test samples from all learned QAs
-        # For locomo, m/n parameters are ignored; use all QAs from the current session as test
-        test_samples = session_qa_indices.copy()
+        # 5. Sample replay test QAs from all learned QAs so far.
+        # The replay test size matches the number of QAs in the current session.
+        n_test = len(session_qa_indices)
+        if n_test > 0:
+            if shuffle_enabled and rng:
+                test_samples = rng.sample(learned_samples, min(n_test, len(learned_samples)))
+            else:
+                test_samples = list(learned_samples[:min(n_test, len(learned_samples))])
+        else:
+            test_samples = []
         schedule.extend([(REPLAY_TEST_MARKER, qa_idx) for qa_idx in test_samples])
 
         # 6. Record this replay batch's info
         replay_info[replay_id] = {
             "train": learned_samples.copy(),  # All QAs learned up to this session
-            "test": test_samples.copy()        # All QAs from the current session
+            "test": test_samples.copy()        # Replay sample drawn from all learned QAs
         }
 
         print(f"[Locomo Replay Schedule] Replay {replay_id} (Session {session_id}): {len(session_qa_indices)} train, {len(test_samples)} test (total learned: {len(learned_samples)})")

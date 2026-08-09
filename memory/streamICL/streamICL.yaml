@@ -1,8 +1,9 @@
 stream_icl:
 
   # ===== Filter configuration =====
-  success_only: true  # true: only store samples with status=="completed", false: store all
+  success_only: false  # true: only store samples with status=="completed", false: store all
   reward_bigger_than_zero: true  # true: only store samples with reward>0, false: store all
+  session_injection_only: false  # true: only update session injection memories, false: update all memories
 
   # ===== Prompt template =====
   # The memory block is injected into the user message at the position specified by `where`

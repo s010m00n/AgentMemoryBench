@@ -7,6 +7,7 @@ Naming convention:
 """
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Callable, Dict, Any
 
@@ -15,6 +16,19 @@ from memory.base import MemoryMechanism
 
 # Registry: name -> (loader_function, default_config_path)
 _MEMORY_REGISTRY: Dict[str, tuple[Callable[[str], MemoryMechanism], str]] = {}
+
+
+def _build_lazy_loader(module_path: str, loader_name: str) -> Callable[[str], MemoryMechanism]:
+    """
+    Build a loader that imports the backing module only when the memory
+    mechanism is actually selected.
+    """
+    def _lazy_loader(config_path: str) -> MemoryMechanism:
+        module = importlib.import_module(module_path)
+        loader_func = getattr(module, loader_name)
+        return loader_func(config_path)
+
+    return _lazy_loader
 
 
 def register_memory(
@@ -66,58 +80,51 @@ def _register_all_memories():
     """Register all built-in memory mechanisms."""
 
     # zero_shot
-    from memory.zero_shot.zero_shot import load_zero_shot_from_yaml
     register_memory(
         name="zero_shot",
-        loader_func=load_zero_shot_from_yaml,
+        loader_func=_build_lazy_loader("memory.zero_shot.zero_shot", "load_zero_shot_from_yaml"),
         default_config_path="memory/zero_shot/zero_shot.yaml",
     )
 
     # stream_icl (snake_case)
-    from memory.streamICL.streamICL import load_stream_icl_from_yaml
     register_memory(
         name="stream_icl",
-        loader_func=load_stream_icl_from_yaml,
+        loader_func=_build_lazy_loader("memory.streamICL.streamICL", "load_stream_icl_from_yaml"),
         default_config_path="memory/streamICL/streamICL.yaml",
     )
 
     # mem0
-    from memory.mem0.mem0 import load_mem0_from_yaml
     register_memory(
         name="mem0",
-        loader_func=load_mem0_from_yaml,
+        loader_func=_build_lazy_loader("memory.mem0.mem0", "load_mem0_from_yaml"),
         default_config_path="memory/mem0/mem0.yaml",
     )
 
-    # everos_agent
-    from memory.everos_agent.everos_agent import load_everos_agent_from_yaml
-    register_memory(
-        name="everos_agent",
-        loader_func=load_everos_agent_from_yaml,
-        default_config_path="memory/everos_agent/everos_agent.yaml",
-    )
-
     # everos_personal
-    from memory.everos_personal.everos_personal import load_everos_personal_from_yaml
     register_memory(
         name="everos_personal",
-        loader_func=load_everos_personal_from_yaml,
+        loader_func=_build_lazy_loader("memory.everos_personal.everos_personal", "load_everos_personal_from_yaml"),
         default_config_path="memory/everos_personal/everos_personal.yaml",
     )
 
+    # skill_nudge
+    register_memory(
+        name="skill_nudge",
+        loader_func=_build_lazy_loader("memory.skill_nudge.skill_nudge", "load_skill_nudge_from_yaml"),
+        default_config_path="memory/skill_nudge/skill_nudge.yaml",
+    )
+
     # mems (lowercase)
-    from memory.MEMs import load_mems_from_yaml
     register_memory(
         name="mems",
-        loader_func=load_mems_from_yaml,
+        loader_func=_build_lazy_loader("memory.MEMs", "load_mems_from_yaml"),
         default_config_path="memory/MEMs/MEMs.yaml",
     )
 
     # awm (snake_case)
-    from memory.AWM import load_awm_from_yaml
     register_memory(
         name="awm",
-        loader_func=load_awm_from_yaml,
+        loader_func=_build_lazy_loader("memory.AWM", "load_awm_from_yaml"),
         default_config_path="memory/AWM/AWM.yaml",
     )
 

@@ -14,6 +14,7 @@ AWM:
   where: "front"
   success_only: true
   reward_bigger_than_zero: true
+  session_injection_only: false
   max_retries: 5
 
   workflow_rag:

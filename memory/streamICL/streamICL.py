@@ -137,6 +137,7 @@ class StreamICLMemory(MemoryMechanism):
         order: str = "similar_at_top",  # "similar_at_top" | "similar_at_bottom" | "random"
         success_only: bool = True,  # True: only store samples with status=="completed", False: store all
         reward_bigger_than_zero: bool = False,  # True: only store samples with reward>0, False: store all
+        session_injection_only: bool = False,  # True: only update session injection memories
         prompt_template: str = "Here are some examples of the task you have completed:\n\n{examples}",
         where: str = "tail",  # "tail": inject after user question | "front": inject before user question
         seed: int = 42,
@@ -168,6 +169,7 @@ class StreamICLMemory(MemoryMechanism):
         )
         self.success_only = success_only
         self.reward_bigger_than_zero = reward_bigger_than_zero
+        self.session_injection_only = session_injection_only
         self.prompt_template = prompt_template
         self.where = where
         self.storage_path = Path(storage_path) if storage_path else None
@@ -186,6 +188,10 @@ class StreamICLMemory(MemoryMechanism):
         except Exception as e:
             raise ImportError(f"Failed to initialize RAG: {e}")
         self._bootstrap_rag()
+
+    @staticmethod
+    def _print(message: str) -> None:
+        print(f"[StreamICL] {message}")
 
     def _bootstrap_rag(self) -> None:
         if not self.rag or not self.storage_path or not self.storage_path.exists():
@@ -232,19 +238,23 @@ class StreamICLMemory(MemoryMechanism):
         template_titles = [self.template_title]
         question = extract_original_question(messages, where=self.where, template_titles=template_titles)
         if not question:
+            self._print(f"use_memory task={task}: no question extracted, skipping retrieval")
             return list(messages) if messages is not None else []  # fallback; rarely triggered
 
         if str(task).startswith("locomo-"):
             question = self._extract_locomo_question(question)
             if not question:
+                self._print(f"use_memory task={task}: no locomo question extracted, skipping retrieval")
                 return list(messages) if messages is not None else []
 
         # Retrieve similar experiences from the global vector store
         if not self.rag:
+            self._print(f"use_memory task={task}: RAG not initialized, skipping retrieval")
             return list(messages) if messages is not None else []  # RAG not initialized; rarely triggered
 
         shots = self.rag.retrieve(query=question, top_k=self.rag.top_k)
         if not shots:
+            self._print(f"use_memory task={task}: no shots retrieved for query_len={len(question)}")
             return list(messages) if messages is not None else []  # no relevant memory found; rarely triggered
 
         # Format the retrieved experiences into a single memory block
@@ -252,6 +262,9 @@ class StreamICLMemory(MemoryMechanism):
         memory_content = self.prompt_template.format(examples=fewshot_text)
 
         # Inject the memory block into the messages
+        self._print(
+            f"use_memory task={task}: retrieved={len(shots)} shots, memory_chars={len(memory_content)}"
+        )
         return enhance_messages_with_memory(messages, memory_content, where=self.where)
 
     def update_memory(self, task: str, history: List[Dict[str, Any]], result: Dict[str, Any]) -> None:
@@ -259,6 +272,10 @@ class StreamICLMemory(MemoryMechanism):
         Called after a single sample finishes execution.
         Writes the new trajectory/result into the memory store.
         """
+        if self.session_injection_only and result.get("type") != "session_injection":
+            self._print(f"update_memory task={task}: skipped by session_injection_only")
+            return
+
         result_type = str(result.get("type", "") or "")
 
         status = result.get("status", "")
@@ -268,6 +285,7 @@ class StreamICLMemory(MemoryMechanism):
 
         # Filter: if success_only=True, skip samples that did not complete successfully
         if self.success_only and not is_success:
+            self._print(f"update_memory task={task}: skipped by success_only (status={status}, reward={reward})")
             logging.debug(
                 "[StreamICL] Skipping sample storage: success_only=True but sample not completed "
                 "(status=%s, task=%s)",
@@ -279,6 +297,7 @@ class StreamICLMemory(MemoryMechanism):
         # Filter: if reward_bigger_than_zero=True, skip samples with non-positive reward
         if self.reward_bigger_than_zero:
             if reward <= 0:
+                self._print(f"update_memory task={task}: skipped by reward_bigger_than_zero (reward={reward})")
                 logging.debug(
                     "[StreamICL] Skipping sample storage: reward_bigger_than_zero=True but reward=%s (task=%s)",
                     reward,
@@ -294,6 +313,7 @@ class StreamICLMemory(MemoryMechanism):
             template_titles = [self.template_title]
             question = extract_original_question(history, where=self.where, template_titles=template_titles)
             if not question:
+                self._print(f"update_memory task={task}: no question extracted from history, skipping storage")
                 logging.debug(
                     "[StreamICL] Skipping sample storage: No question extracted from history (task=%s)",
                     task,
@@ -307,6 +327,7 @@ class StreamICLMemory(MemoryMechanism):
                 chunk = self._format_experience(history)
 
             if not question:
+                self._print(f"update_memory task={task}: no locomo question extracted, skipping storage")
                 logging.debug(
                     "[StreamICL] Skipping sample storage: No locomo question extracted from history (task=%s)",
                     task,
@@ -314,6 +335,7 @@ class StreamICLMemory(MemoryMechanism):
                 return
 
         if not chunk:
+            self._print(f"update_memory task={task}: formatted chunk empty, skipping storage")
             logging.debug(
                 "[StreamICL] Skipping sample storage: Empty formatted chunk (task=%s)",
                 task,
@@ -322,9 +344,13 @@ class StreamICLMemory(MemoryMechanism):
 
         # Insert into the global vector store (not partitioned by task)
         if not self.rag:
+            self._print(f"update_memory task={task}: RAG not initialized, skipping storage")
             return
         self.rag.insert(key=question, value=chunk)
         self._append_record(task=task, key=question, value=chunk, result=result)
+        self._print(
+            f"update_memory task={task}: stored chunk key_len={len(question)}, chunk_chars={len(chunk)}"
+        )
 
     def _format_experience(self, history: List[Dict[str, Any]]) -> str:
         """
@@ -556,6 +582,7 @@ def load_stream_icl_from_yaml(config_path: str) -> StreamICLMemory:
 
     success_only = bool(stream_icl_cfg.get("success_only", True))
     reward_bigger_than_zero = bool(stream_icl_cfg.get("reward_bigger_than_zero", False))
+    session_injection_only = bool(stream_icl_cfg.get("session_injection_only", False))
     prompt_template = stream_icl_cfg.get("prompt_template", "Here are some examples of the task you have completed:\n\n{examples}")
     where = stream_icl_cfg.get("where", "tail")
     storage_path = stream_icl_cfg.get("storage_path", "memory/streamICL/trajectories.jsonl")
@@ -567,6 +594,7 @@ def load_stream_icl_from_yaml(config_path: str) -> StreamICLMemory:
         order=order,
         success_only=success_only,
         reward_bigger_than_zero=reward_bigger_than_zero,
+        session_injection_only=session_injection_only,
         prompt_template=prompt_template,
         where=where,
         seed=seed,

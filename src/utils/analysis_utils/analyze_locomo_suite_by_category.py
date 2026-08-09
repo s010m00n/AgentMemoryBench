@@ -41,6 +41,8 @@ def analyze_locomo_suite(base_dir: Path) -> Dict[str, Any]:
                 "f1_scores": [],
                 "bleu_scores": [],
                 "llm_scores": [],
+                "memory_token_estimates": [],
+                "samples_with_injection": 0,
             }
         ),
     }
@@ -57,6 +59,8 @@ def analyze_locomo_suite(base_dir: Path) -> Dict[str, Any]:
             stats["by_category"][cat_key]["f1_scores"].extend(cat_stats["f1_scores"])
             stats["by_category"][cat_key]["bleu_scores"].extend(cat_stats["bleu_scores"])
             stats["by_category"][cat_key]["llm_scores"].extend(cat_stats["llm_scores"])
+            stats["by_category"][cat_key]["memory_token_estimates"].extend(cat_stats.get("memory_token_estimates", []))
+            stats["by_category"][cat_key]["samples_with_injection"] += cat_stats.get("samples_with_injection", 0)
             stats["total_valid_samples"] += cat_stats["count"]
 
     for cat_key, cat_stats in stats["by_category"].items():
@@ -69,18 +73,42 @@ def analyze_locomo_suite(base_dir: Path) -> Dict[str, Any]:
         cat_stats["avg_llm_score"] = (
             sum(cat_stats["llm_scores"]) / len(cat_stats["llm_scores"]) if cat_stats["llm_scores"] else 0.0
         )
+        cat_stats["avg_injected_memory_tokens"] = (
+            sum(cat_stats["memory_token_estimates"]) / len(cat_stats["memory_token_estimates"])
+            if cat_stats["memory_token_estimates"] else 0.0
+        )
+        cat_stats["min_injected_memory_tokens"] = (
+            min(cat_stats["memory_token_estimates"]) if cat_stats["memory_token_estimates"] else 0
+        )
+        cat_stats["max_injected_memory_tokens"] = (
+            max(cat_stats["memory_token_estimates"]) if cat_stats["memory_token_estimates"] else 0
+        )
+        cat_stats["injection_rate"] = (
+            cat_stats["samples_with_injection"] / cat_stats["count"]
+            if cat_stats["count"] else 0.0
+        )
 
     all_f1: List[float] = []
     all_bleu: List[float] = []
     all_llm: List[float] = []
+    all_memory_tokens: List[int] = []
+    total_samples_with_injection = 0
     for cat_stats in stats["by_category"].values():
         all_f1.extend(cat_stats["f1_scores"])
         all_bleu.extend(cat_stats["bleu_scores"])
         all_llm.extend(cat_stats["llm_scores"])
+        all_memory_tokens.extend(cat_stats["memory_token_estimates"])
+        total_samples_with_injection += cat_stats["samples_with_injection"]
 
     stats["overall_avg_f1_score"] = sum(all_f1) / len(all_f1) if all_f1 else 0.0
     stats["overall_avg_bleu_score"] = sum(all_bleu) / len(all_bleu) if all_bleu else 0.0
     stats["overall_avg_llm_score"] = sum(all_llm) / len(all_llm) if all_llm else 0.0
+    stats["overall_avg_injected_memory_tokens"] = (
+        sum(all_memory_tokens) / len(all_memory_tokens) if all_memory_tokens else 0.0
+    )
+    stats["overall_injection_rate"] = (
+        total_samples_with_injection / stats["total_valid_samples"] if stats["total_valid_samples"] else 0.0
+    )
     return stats
 
 
@@ -97,6 +125,8 @@ def print_report(stats: Dict[str, Any]) -> None:
     print(f"F1:   {stats['overall_avg_f1_score']:.4f}")
     print(f"BLEU: {stats['overall_avg_bleu_score']:.4f}")
     print(f"LLM:  {stats['overall_avg_llm_score']:.4f}")
+    print(f"Injected Memory Tokens (heuristic): {stats['overall_avg_injected_memory_tokens']:.1f}")
+    print(f"Injection Rate: {stats['overall_injection_rate']*100:.1f}%")
 
     print("\nWeighted Average by Category")
     print("-" * 80)
@@ -111,7 +141,9 @@ def print_report(stats: Dict[str, Any]) -> None:
             f"count={cat_stats['count']}  "
             f"F1={cat_stats['avg_f1_score']:.4f}  "
             f"BLEU={cat_stats['avg_bleu_score']:.4f}  "
-            f"LLM={cat_stats['avg_llm_score']:.4f}"
+            f"LLM={cat_stats['avg_llm_score']:.4f}  "
+            f"MemTok={cat_stats['avg_injected_memory_tokens']:.1f}  "
+            f"InjRate={cat_stats['injection_rate']*100:.1f}%"
         )
 
 

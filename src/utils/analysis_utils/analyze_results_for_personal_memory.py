@@ -8,6 +8,7 @@ Usage:
 import json
 import sys
 import io
+import math
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -19,6 +20,38 @@ if sys.platform == "win32":
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
     except Exception:
         pass
+
+
+QUESTION_SEPARATOR = "\n\nQuestion:"
+FRONT_INJECTION_SEPARATOR = "--- Original Question Below ---"
+
+
+def _extract_first_user_content(history: List[Dict[str, Any]]) -> str:
+    for msg in history or []:
+        if isinstance(msg, dict) and msg.get("role") == "user":
+            return str(msg.get("content", "") or "")
+    return ""
+
+
+def _extract_injected_memory_text(history: List[Dict[str, Any]]) -> str:
+    content = _extract_first_user_content(history)
+    if not content:
+        return ""
+
+    if QUESTION_SEPARATOR in content:
+        return content.split(QUESTION_SEPARATOR, 1)[0].strip()
+
+    if FRONT_INJECTION_SEPARATOR in content:
+        return content.split(FRONT_INJECTION_SEPARATOR, 1)[0].strip()
+
+    return ""
+
+
+def _estimate_text_tokens(text: str) -> int:
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        return 0
+    return max(1, math.ceil(len(cleaned) / 4))
 
 
 def analyze_results(result_dir: Path) -> Dict[str, Any]:
@@ -63,12 +96,16 @@ def analyze_results(result_dir: Path) -> Dict[str, Any]:
         "f1_scores": [],
         "bleu_scores": [],
         "llm_scores": [],
+        "memory_token_estimates": [],
+        "samples_with_injection": 0,
         # Grouped by category
         "by_category": defaultdict(lambda: {
             "count": 0,
             "f1_scores": [],
             "bleu_scores": [],
             "llm_scores": [],
+            "memory_token_estimates": [],
+            "samples_with_injection": 0,
         }),
     }
 
@@ -82,6 +119,7 @@ def analyze_results(result_dir: Path) -> Dict[str, Any]:
 
         result = data.get("result", {})
         index = result.get("index", data.get("index", json_file.stem))
+        history = data.get("history", [])
 
         # Extract basic info
         if stats["task_name"] is None:
@@ -111,6 +149,12 @@ def analyze_results(result_dir: Path) -> Dict[str, Any]:
         if llm_score is not None and 0 <= llm_score <= 1:
             stats["llm_scores"].append(llm_score)
 
+        injected_memory_text = _extract_injected_memory_text(history)
+        estimated_memory_tokens = _estimate_text_tokens(injected_memory_text)
+        stats["memory_token_estimates"].append(estimated_memory_tokens)
+        if estimated_memory_tokens > 0:
+            stats["samples_with_injection"] += 1
+
         # Group stats by category
         category = result.get("category")
         if category is not None:
@@ -121,18 +165,43 @@ def analyze_results(result_dir: Path) -> Dict[str, Any]:
                 stats["by_category"][cat_key]["bleu_scores"].append(bleu_score)
             if llm_score is not None and 0 <= llm_score <= 1:
                 stats["by_category"][cat_key]["llm_scores"].append(llm_score)
+            stats["by_category"][cat_key]["memory_token_estimates"].append(estimated_memory_tokens)
+            if estimated_memory_tokens > 0:
+                stats["by_category"][cat_key]["samples_with_injection"] += 1
             stats["by_category"][cat_key]["count"] += 1
 
     # Compute overall averages
     stats["avg_f1_score"] = sum(stats["f1_scores"]) / len(stats["f1_scores"]) if stats["f1_scores"] else 0.0
     stats["avg_bleu_score"] = sum(stats["bleu_scores"]) / len(stats["bleu_scores"]) if stats["bleu_scores"] else 0.0
     stats["avg_llm_score"] = sum(stats["llm_scores"]) / len(stats["llm_scores"]) if stats["llm_scores"] else 0.0
+    stats["avg_injected_memory_tokens"] = (
+        sum(stats["memory_token_estimates"]) / len(stats["memory_token_estimates"])
+        if stats["memory_token_estimates"] else 0.0
+    )
+    stats["injection_rate"] = (
+        stats["samples_with_injection"] / len(stats["memory_token_estimates"])
+        if stats["memory_token_estimates"] else 0.0
+    )
 
     # Compute per-category averages
     for cat_key, cat_stats in stats["by_category"].items():
         cat_stats["avg_f1_score"] = sum(cat_stats["f1_scores"]) / len(cat_stats["f1_scores"]) if cat_stats["f1_scores"] else 0.0
         cat_stats["avg_bleu_score"] = sum(cat_stats["bleu_scores"]) / len(cat_stats["bleu_scores"]) if cat_stats["bleu_scores"] else 0.0
         cat_stats["avg_llm_score"] = sum(cat_stats["llm_scores"]) / len(cat_stats["llm_scores"]) if cat_stats["llm_scores"] else 0.0
+        cat_stats["avg_injected_memory_tokens"] = (
+            sum(cat_stats["memory_token_estimates"]) / len(cat_stats["memory_token_estimates"])
+            if cat_stats["memory_token_estimates"] else 0.0
+        )
+        cat_stats["min_injected_memory_tokens"] = (
+            min(cat_stats["memory_token_estimates"]) if cat_stats["memory_token_estimates"] else 0
+        )
+        cat_stats["max_injected_memory_tokens"] = (
+            max(cat_stats["memory_token_estimates"]) if cat_stats["memory_token_estimates"] else 0
+        )
+        cat_stats["injection_rate"] = (
+            cat_stats["samples_with_injection"] / cat_stats["count"]
+            if cat_stats["count"] else 0.0
+        )
 
     return stats
 
@@ -161,6 +230,8 @@ def print_report(stats: Dict[str, Any], result_dir: Path):
     print(f"Avg F1 Score:   {stats['avg_f1_score']:.4f}")
     print(f"Avg BLEU Score: {stats['avg_bleu_score']:.4f}")
     print(f"Avg LLM Score:  {stats['avg_llm_score']:.4f}")
+    print(f"Avg Injected Memory Tokens (heuristic): {stats['avg_injected_memory_tokens']:.1f}")
+    print(f"Injection Rate: {stats['injection_rate']*100:.1f}%")
 
     # Stats grouped by category
     if stats["by_category"]:
@@ -181,6 +252,10 @@ def print_report(stats: Dict[str, Any], result_dir: Path):
             print(f"  Avg F1 Score:   {cat_stats['avg_f1_score']:.4f}")
             print(f"  Avg BLEU Score: {cat_stats['avg_bleu_score']:.4f}")
             print(f"  Avg LLM Score:  {cat_stats['avg_llm_score']:.4f}")
+            print(f"  Avg Injected Memory Tokens: {cat_stats['avg_injected_memory_tokens']:.1f}")
+            print(f"  Min Injected Memory Tokens: {cat_stats['min_injected_memory_tokens']}")
+            print(f"  Max Injected Memory Tokens: {cat_stats['max_injected_memory_tokens']}")
+            print(f"  Injection Rate: {cat_stats['injection_rate']*100:.1f}%")
 
     print("\n" + "=" * 80)
 

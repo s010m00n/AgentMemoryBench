@@ -113,6 +113,9 @@ def analyze_results(result_dir: Path) -> Dict[str, Any]:
         "no_reward": 0,
         "error_types": Counter(),
         "turn_counts": [],
+        "turn_counts_reward_1": [],
+        "turn_counts_reward_0": [],
+        "turn_counts_no_reward": [],
         "error_samples": [],
         "success_samples": [],
         "task_name": None,
@@ -129,6 +132,7 @@ def analyze_results(result_dir: Path) -> Dict[str, Any]:
 
         result = data.get("result", {})
         index = result.get("index", data.get("index", json_file.stem))
+        history = data.get("history", [])
 
         # Extract basic info
         if stats["task_name"] is None:
@@ -143,15 +147,26 @@ def analyze_results(result_dir: Path) -> Dict[str, Any]:
         elif result.get("error"):
             stats["failed"] += 1
 
+        # Count turns
+        turns = count_turns(history) if history else 0
+        if history:
+            stats["turn_counts"].append(turns)
+
         # Count reward
         reward = result.get("reward")
         if reward == 1:
             stats["reward_1"] += 1
             stats["success_samples"].append(index)
+            if history:
+                stats["turn_counts_reward_1"].append(turns)
         elif reward == 0:
             stats["reward_0"] += 1
+            if history:
+                stats["turn_counts_reward_0"].append(turns)
         else:
             stats["no_reward"] += 1
+            if history:
+                stats["turn_counts_no_reward"].append(turns)
 
         # Count error types
         error = result.get("error")
@@ -167,12 +182,6 @@ def analyze_results(result_dir: Path) -> Dict[str, Any]:
                 "error": error[:200] + "..." if len(error) > 200 else error,
             })
 
-        # Count turns
-        history = data.get("history", [])
-        if history:
-            turns = count_turns(history)
-            stats["turn_counts"].append(turns)
-
     # Compute average turns
     if stats["turn_counts"]:
         stats["avg_turns"] = sum(stats["turn_counts"]) / len(stats["turn_counts"])
@@ -182,6 +191,20 @@ def analyze_results(result_dir: Path) -> Dict[str, Any]:
         stats["avg_turns"] = 0
         stats["min_turns"] = 0
         stats["max_turns"] = 0
+
+    for reward_key, values in (
+        ("reward_1", stats["turn_counts_reward_1"]),
+        ("reward_0", stats["turn_counts_reward_0"]),
+        ("no_reward", stats["turn_counts_no_reward"]),
+    ):
+        if values:
+            stats[f"avg_turns_{reward_key}"] = sum(values) / len(values)
+            stats[f"min_turns_{reward_key}"] = min(values)
+            stats[f"max_turns_{reward_key}"] = max(values)
+        else:
+            stats[f"avg_turns_{reward_key}"] = 0
+            stats[f"min_turns_{reward_key}"] = 0
+            stats[f"max_turns_{reward_key}"] = 0
 
     return stats
 
@@ -217,6 +240,16 @@ def print_report(stats: Dict[str, Any], result_dir: Path):
         print(f"Avg turns: {stats['avg_turns']:.2f}")
         print(f"Min turns: {stats['min_turns']}")
         print(f"Max turns: {stats['max_turns']}")
+        print(f"Reward = 1 avg turns: {stats['avg_turns_reward_1']:.2f}")
+        print(f"Reward = 1 min turns: {stats['min_turns_reward_1']}")
+        print(f"Reward = 1 max turns: {stats['max_turns_reward_1']}")
+        print(f"Reward = 0 avg turns: {stats['avg_turns_reward_0']:.2f}")
+        print(f"Reward = 0 min turns: {stats['min_turns_reward_0']}")
+        print(f"Reward = 0 max turns: {stats['max_turns_reward_0']}")
+        if stats["turn_counts_no_reward"]:
+            print(f"No reward avg turns: {stats['avg_turns_no_reward']:.2f}")
+            print(f"No reward min turns: {stats['min_turns_no_reward']}")
+            print(f"No reward max turns: {stats['max_turns_no_reward']}")
 
     if stats["error_types"]:
         print(f"\n{'─' * 80}")

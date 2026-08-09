@@ -1,22 +1,23 @@
 mem0:
-  api_key: "m0-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  api_key: "m0-xxxxxxxxxxxxxxxxxxx"
 
   # ===== user_id configuration =====
   # User-defined user_id for grouping memories in Mem0 Platform
   # e.g.: "experiment_001", "dbbench_cross_task", "alfworld_online"
-  user_id: "exp_067"
+  user_id: "exp_049"
 
   # ===== Memory operation configuration =====
   infer: true  # true: automatically extract structured memories, false: store raw messages
 
   # Retrieval configuration
-  top_k: 50  # retrieve top_k most relevant memories  # best practice: 50
+  top_k: 30  # retrieve top_k most relevant memories  # best practice: 30
   threshold: 0  # similarity threshold (optional, 0.0-1.0; memories below this are filtered out)
   rerank: true  # whether to enable reranking
 
   # ===== Filter configuration =====
   success_only: true  # only store successful samples (finish==True)
   reward_bigger_than_zero: true  # true: only store samples with reward > 0, false: store all
+  session_injection_only: false  # true: only update session injection memories, false: update all memories
 
   # ===== Prompt template =====
   # Memory content is injected into the user question at the position specified by `where`
@@ -33,4 +34,4 @@ mem0:
   retry_backoff: 2.0  # exponential backoff multiplier (each retry delay = previous delay * retry_backoff)
 
   # ===== Wait configuration =====
-  wait_time: 60.0  # time to wait after each successful memory add (seconds)
+  wait_time: 90  # time to wait after each successful memory add (seconds)

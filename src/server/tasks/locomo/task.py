@@ -16,7 +16,7 @@ except ImportError:
     from functools import lru_cache
     cache = lru_cache(maxsize=None)
 
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 
 from .task_base import Task, Session
 from .typings import (
@@ -187,6 +187,15 @@ def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str
         else:
             result[k] = v
     return result
+
+
+def _compact_openai_error_message(error: Exception) -> str:
+    """Extract a concise, single-line message from OpenAI-compatible errors."""
+    message = str(error or "").strip()
+    match = re.search(r"'message':\s*'([^']+)'", message)
+    if match:
+        return match.group(1).strip()
+    return " ".join(message.split())
 
 
 def load_evaluate_agent_config(agent_name: str) -> Optional[Dict[str, Any]]:
@@ -622,12 +631,19 @@ Just return the label CORRECT or WRONG in a json format with the key as "label":
                 )
                 time.sleep(5)
             except Exception as e:
-                self.logger.warning(
-                    "LLM judge evaluation failed on attempt %s: %s. Retrying in 5 seconds",
-                    attempt,
-                    e,
-                    exc_info=True,
-                )
+                if isinstance(e, RateLimitError):
+                    self.logger.warning(
+                        "LLM judge rate limited on attempt %s: %s. Retrying in 5 seconds",
+                        attempt,
+                        _compact_openai_error_message(e),
+                    )
+                else:
+                    self.logger.warning(
+                        "LLM judge evaluation failed on attempt %s: %s. Retrying in 5 seconds",
+                        attempt,
+                        e,
+                        exc_info=True,
+                    )
                 time.sleep(5)
 
     def _evaluate_answer(

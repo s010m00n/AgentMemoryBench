@@ -1,0 +1,44 @@
+skill_nudge:
+  selector_model_name: "gpt-4o-mini"
+  manager_model_name: "gpt-4o-mini"
+
+  selector_prompt_path: "memory/skill_nudge/prompts/selector.txt"
+  manager_prompt_path: "memory/skill_nudge/prompts/manager.txt"
+  skill_storage_path: "memory/skill_nudge/skills.jsonl"
+
+  nudge_interval: 5
+  max_manager_steps: 10
+  max_selected_skills: 8
+  max_catalog_size: 200
+
+  prompt_template: |
+    Here are relevant reusable skills from prior experience.
+    Use them only when they truly apply.
+
+    {skills}
+
+  few_shot:
+    enabled: false
+    top_k: 2
+    order: "similar_at_top"  # similar_at_top | similar_at_bottom | random
+    embedding_model: "C:/Users/123/Desktop/code/agent-memory/bge-base-en-v1.5"
+    seed: 42
+    storage_path: "memory/skill_nudge/fewshot_examples.jsonl"
+    success_only: true
+    reward_bigger_than_zero: true
+    include_reasoning_content: true
+    prompt_template: |
+      Here are some examples of the task you have completed:
+
+      {examples}
+
+  where: "front"
+  session_injection_only: false  # true: only update session injection memories, false: update all memories
+
+  update_success_only: false
+  update_reward_bigger_than_zero: false
+
+  request_timeout: 120.0
+  max_retries: 3
+  retry_delay: 2.0
+  retry_backoff: 2.0
